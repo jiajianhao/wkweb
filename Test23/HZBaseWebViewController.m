@@ -5,15 +5,19 @@
 //  Created by 小雨科技 on 2017/7/31.
 //  Copyright © 2017年 Hui Jiang. All rights reserved.
 //
+//WKNavigationDelegate 主要用于页面跳转、加载处理等
+//WKUIDelegate 主要用于处理js脚本、警告框、确认框等
+//使用WKUserContentController实现js native交互。
 
 #import "HZBaseWebViewController.h"
 #import <WebKit/WebKit.h>
 #import "mConstant.h"
 
-@interface HZBaseWebViewController ()<WKNavigationDelegate, WKUIDelegate,UIGestureRecognizerDelegate>
+@interface HZBaseWebViewController ()<WKNavigationDelegate, WKUIDelegate,WKScriptMessageHandler, UIGestureRecognizerDelegate>
 
 @property (strong, nonatomic) WKWebView *webView;
 @property (nonatomic, strong) WKWebViewConfiguration *wkConfig;
+@property (nonatomic, strong) WKUserContentController* userContentController;
 
 @property (nonatomic, strong) UIProgressView *progressView;
 
@@ -23,20 +27,27 @@
 @implementation HZBaseWebViewController
 - (WKWebViewConfiguration *)wkConfig {
     if (!_wkConfig) {
+        //WKWebView的环境配置，默认配置可以修改
         _wkConfig = [[WKWebViewConfiguration alloc] init];
-        _wkConfig.allowsInlineMediaPlayback = YES;
-        _wkConfig.allowsPictureInPictureMediaPlayback = YES;
+        _wkConfig.allowsInlineMediaPlayback = YES;//打开内嵌视频的播放
+        _wkConfig.allowsPictureInPictureMediaPlayback = YES;//允许画中画视频，其实就是小窗播放
+        
+        _userContentController =[[WKUserContentController alloc]init];
+        _wkConfig.userContentController=_userContentController;
     }
     return _wkConfig;
 }
 - (void)dealloc {
     [self.webView removeObserver:self forKeyPath:@"estimatedProgress"];
+    [_userContentController removeScriptMessageHandlerForName:@"sayhello"];
+
 }
+
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self.view setBackgroundColor:[UIColor whiteColor]];
-     [self customNaviItemWithBarColor:[UIColor colorWithRed:100/255.0 green:100/255.0 blue:100/255.0 alpha:1.0]
+    [self customNaviItemWithBarColor:[UIColor colorWithRed:100/255.0 green:100/255.0 blue:100/255.0 alpha:1.0]
                                title:self.titlename
                    useDefaultBackBtn:YES
                              leftBtn:nil
@@ -44,11 +55,13 @@
                      hasLineAtBottom:YES];
  
     // Do any additional setup after loading the view.
-    _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, kNavBarHeightWithStatusBar, _WIDTH, _HEIGHT-kNavBarHeightWithStatusBar)];
+    _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, kNavBarHeightWithStatusBar, _WIDTH, _HEIGHT-kNavBarHeightWithStatusBar) configuration:self.wkConfig];
     _webView.UIDelegate = self;
     _webView.navigationDelegate = self;
     [_webView.scrollView setAlwaysBounceVertical:YES];
     [_webView setAllowsBackForwardNavigationGestures:YES];
+    //注册方法
+    [_userContentController addScriptMessageHandler:self name:@"sayhello"];
 
     [self.view addSubview:_webView];
     
@@ -146,7 +159,7 @@
  *  @param error      错误
  */
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error {
-    NSLog(@"%@",error);
+    NSLog(@"error:--- %@",error);
     NSLog(@"%s", __FUNCTION__);
 }
 
@@ -191,24 +204,68 @@
  */
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
     
-     NSLog(@"decidePolicyForNavigationAction:--- %@",navigationAction.request.URL);
-    
-    
+    if (!navigationAction.targetFrame.isMainFrame) {
+        [webView evaluateJavaScript:@"var a = document.getElementsByTagName('a');for(var i=0;i<a.length;i++){a[i].setAttribute('target','');}" completionHandler:nil];
+    }
     decisionHandler(WKNavigationActionPolicyAllow);
-
- //
  
 }
+
+
+#pragma mark -- WKUIdelegate
+
+/**
+  进入一个新的webview
+ */
 -(WKWebView *)webView:(WKWebView *)webView createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration forNavigationAction:(WKNavigationAction *)navigationAction windowFeatures:(WKWindowFeatures *)windowFeatures
 {
     if (!navigationAction.targetFrame.isMainFrame) {
-        [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:self.urlString]]];
+        [_webView loadRequest:navigationAction.request];
     }
     return nil;
+    //当html源代码中，一个可点击的标签带有target='_blank'时，导致WKWebView无法加载点击后的网页的问题。
+    //如果你发现你的WKWebView中的网页，点击某个按钮无反应。
+    //上面的那段代码可以用来处理点击按钮无法加载网页问题，因为它是强制打开请求链接的，不管点击事件了
+    
+    //ps:如果request的url是空的呢？？？
+    //答：那就把_blank清除掉...见最下面
+    
+    
 }
-
+- (void)webView:(WKWebView *)webView runJavaScriptAlertPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(void))completionHandler{
+//    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"提示" message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
+//    [alertController addAction:([UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+//        completionHandler();
+//    }])];
+//    [self presentViewController:alertController animated:YES completion:nil];
+    
+}
+- (void)webView:(WKWebView *)webView runJavaScriptConfirmPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(BOOL))completionHandler{
+    //    DLOG(@"msg = %@ frmae = %@",message,frame);
+//    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"提示" message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
+//    [alertController addAction:([UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+//        completionHandler(NO);
+//    }])];
+//    [alertController addAction:([UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+//        completionHandler(YES);
+//    }])];
+//    [self presentViewController:alertController animated:YES completion:nil];
+}
+- (void)webView:(WKWebView *)webView runJavaScriptTextInputPanelWithPrompt:(NSString *)prompt defaultText:(NSString *)defaultText initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(NSString * _Nullable))completionHandler{
+//    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:prompt message:@"" preferredStyle:UIAlertControllerStyleAlert];
+//    [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+//        textField.text = defaultText;
+//    }];
+//    [alertController addAction:([UIAlertAction actionWithTitle:@"完成" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+//        completionHandler(alertController.textFields[0].text?:@"");
+//    }])];
+//    
+//    
+//    [self presentViewController:alertController animated:YES completion:nil];
+}
+#pragma mark -- 进度监视
 /*
- *4.在监听方法中获取网页加载的进度，并将进度赋给progressView.progress
+    在监听方法中获取网页加载的进度，并将进度赋给progressView.progress
  */
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSString *,id> *)change context:(void *)context {
@@ -232,17 +289,20 @@
         [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
     }
 }
-
-
+ #pragma mark - WKScriptMessageHandler
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message{
+    NSLog(@"name:%@\\\\n body:%@\\\\n frameInfo:%@\\\\n",message.name,message.body,message.frameInfo);
+}
 
 /*
-#pragma mark - Navigation
-
-// In a storyboard-based application, you will often want to do a little preparation before navigation
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    // Get the new view controller using [segue destinationViewController].
-    // Pass the selected object to the new view controller.
+//这个是将网页上所有的_blank标签都去掉了。。。上面代码用到了。。
+ - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+{
+    if (!navigationAction.targetFrame.isMainFrame) {
+        [webView evaluateJavaScript:@"var a = document.getElementsByTagName('a');for(var i=0;i<a.length;i++){a[i].setAttribute('target','');}" completionHandler:nil];
+    }
+    decisionHandler(WKNavigationActionPolicyAllow);
 }
-*/
 
+*/
 @end
