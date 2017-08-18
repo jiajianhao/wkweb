@@ -2,12 +2,17 @@
 //  HZBaseWebViewController.m
 //  NuanChou
 //
-//  Created by 小雨科技 on 2017/7/31.
-//  Copyright © 2017年 Hui Jiang. All rights reserved.
+//  Created by Jia jianhao on 2017/7/31.
+//  Copyright © 2017年 Jia jianhao. All rights reserved.
 //
 //WKNavigationDelegate 主要用于页面跳转、加载处理等
 //WKUIDelegate 主要用于处理js脚本、警告框、确认框等
 //使用WKUserContentController实现js native交互。
+//WKweb有estimatedprogress参数表示当前加载进度，监听这个参数，可以做web加载的进度条
+
+//User Agent中文名为用户代理，简称 UA，它是一个特殊字符串头，使得服务器能够识别客户使用的操作系统及版本、CPU 类型、浏览器及版本、浏览器渲染引擎、浏览器语言、浏览器插件等。
+//浏览器UA 字串的标准格式为： 浏览器标识 (操作系统标识; 加密等级标识; 浏览器语言) 渲染引擎标识 版本信息
+
 
 #import "HZBaseWebViewController.h"
 #import <WebKit/WebKit.h>
@@ -60,7 +65,21 @@
     _webView.navigationDelegate = self;
     [_webView.scrollView setAlwaysBounceVertical:YES];
     [_webView setAllowsBackForwardNavigationGestures:YES];
-    //注册方法
+    
+    //修改UA
+    [_webView evaluateJavaScript:@"navigator.userAgent" completionHandler:^(id result, NSError *error) {
+        NSString *oldAgent = result;
+        NSLog(@"%@",oldAgent);
+        // 给User-Agent添加额外的信息
+        NSString *newAgent = [NSString stringWithFormat:@"%@;%@", oldAgent, @"extra_user_agent"];
+        NSLog(@"%@",newAgent);
+
+        // 设置global User-Agent
+        NSDictionary *dictionary = [NSDictionary dictionaryWithObjectsAndKeys:newAgent, @"UserAgent", nil];
+        [[NSUserDefaults standardUserDefaults] registerDefaults:dictionary];
+    }];
+    
+    //注册监听js方法
     [_userContentController addScriptMessageHandler:self name:@"sayhello"];
 
     [self.view addSubview:_webView];
@@ -72,7 +91,7 @@
     [self.view addSubview:self.progressView];
     
     /*
-     *3.添加KVO，WKWebView有一个属性estimatedProgress，就是当前网页加载的进度，所以监听这个属性。
+     添加KVO，WKWebView有一个属性estimatedProgress，就是当前网页加载的进度，所以监听这个属性。
      */
     [self.webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
     
@@ -267,7 +286,6 @@
 /*
     在监听方法中获取网页加载的进度，并将进度赋给progressView.progress
  */
-
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSString *,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"estimatedProgress"]) {
         self.progressView.progress = self.webView.estimatedProgress;
@@ -289,6 +307,7 @@
         [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
     }
 }
+
  #pragma mark - WKScriptMessageHandler
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message{
     NSLog(@"name:%@\\\\n body:%@\\\\n frameInfo:%@\\\\n",message.name,message.body,message.frameInfo);
@@ -305,4 +324,13 @@
 }
 
 */
+/*
+ UA 加密等级标识
+ 
+ 　　N: 表示无安全加密
+ 
+ 　　I: 表示弱安全加密
+ 
+ 　　U: 表示强安全加密
+ */
 @end

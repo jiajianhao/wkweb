@@ -2,8 +2,8 @@
 //  NCBaseViewController.m
 //  NuanChou
 //
-//  Created by Hui Jiang on 09/05/2017.
-//  Copyright © 2017 Hui Jiang. All rights reserved.
+//  Created by Jia jianhao on 09/05/2017.
+//  Copyright © 2017 Jia jianhao. All rights reserved.
 //
 //宽高
 

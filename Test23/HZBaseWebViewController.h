@@ -2,8 +2,8 @@
 //  HZBaseWebViewController.h
 //  NuanChou
 //
-//  Created by 小雨科技 on 2017/7/31.
-//  Copyright © 2017年 Hui Jiang. All rights reserved.
+//  Created by Jia jianhao on 2017/7/31.
+//  Copyright © 2017年 Jia jianhao. All rights reserved.
 //
 
 #import "NCBaseViewController.h"
