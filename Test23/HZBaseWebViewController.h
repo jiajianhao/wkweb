@@ -13,5 +13,8 @@
 /** 请求地址*/
 @property (nonatomic, strong) NSString *urlString;
 @property (nonatomic, strong) NSString *titlename;
+//
+@property (nonatomic, assign) BOOL useHtml;
+@property (nonatomic, strong) NSString *htmlString;
 
 @end

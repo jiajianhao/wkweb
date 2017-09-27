@@ -17,7 +17,9 @@
 #import "HZBaseWebViewController.h"
 #import <WebKit/WebKit.h>
 #import "mConstant.h"
-
+#import "WKWebView+Util.h"
+#import "objc/runtime.h"
+#import "WFImageUtil.h"
 @interface HZBaseWebViewController ()<WKNavigationDelegate, WKUIDelegate,WKScriptMessageHandler, UIGestureRecognizerDelegate>
 
 @property (strong, nonatomic) WKWebView *webView;
@@ -30,6 +32,16 @@
 @end
 
 @implementation HZBaseWebViewController
+static char imgUrlArrayKey;
+- (void)setMethod:(NSArray *)imgUrlArray
+{
+    objc_setAssociatedObject(self, &imgUrlArrayKey, imgUrlArray, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSArray *)getImgUrlArray
+{
+    return objc_getAssociatedObject(self, &imgUrlArrayKey);
+}
 - (WKWebViewConfiguration *)wkConfig {
     if (!_wkConfig) {
         //WKWebView的环境配置，默认配置可以修改
@@ -94,8 +106,14 @@
      添加KVO，WKWebView有一个属性estimatedProgress，就是当前网页加载的进度，所以监听这个属性。
      */
     [self.webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
-    
-    [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:self.urlString]]];
+    if (!_useHtml) {
+        [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:self.urlString]]];
+
+    }
+    else{
+        [_webView loadHTMLString:_htmlString baseURL:nil];
+
+    }
  }
 -(void)viewWillAppear:(BOOL)animated{
     [super viewWillAppear:animated];
@@ -166,7 +184,8 @@
  *  @param navigation 当前navigation
  */
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
-    
+//    [self getImageUrlByJS:webView];
+
     NSLog(@"didFinishNavigation: %s", __FUNCTION__);
  }
 
@@ -206,7 +225,8 @@
 //    if ([navigationResponse.response.URL.host.lowercaseString isEqual:@"www.baidu.com"]) {
 //        
 //        // 允许跳转
-  
+    
+
         decisionHandler(WKNavigationResponsePolicyAllow);
 //        return;
 //    }
@@ -226,6 +246,8 @@
     if (!navigationAction.targetFrame.isMainFrame) {
         [webView evaluateJavaScript:@"var a = document.getElementsByTagName('a');for(var i=0;i<a.length;i++){a[i].setAttribute('target','');}" completionHandler:nil];
     }
+//    [self showBigImage:navigationAction.request];
+
     decisionHandler(WKNavigationActionPolicyAllow);
  
 }
@@ -342,4 +364,90 @@
  
  　　U: 表示强安全加密
  */
+
+#pragma mark
+-(NSArray *)getImageUrlByJS:(WKWebView *)wkWebView
+{
+    
+    //查看大图代码
+    //js方法遍历图片添加点击事件返回图片个数
+    static  NSString * const jsGetImages =
+    @"function getImages(){\
+    var objs = document.getElementsByTagName(\"img\");\
+    var imgUrlStr='';\
+    for(var i=0;i<objs.length;i++){\
+    if(i==0){\
+    if(objs[i].alt==''){\
+    imgUrlStr=objs[i].src;\
+    }\
+    }else{\
+    if(objs[i].alt==''){\
+    imgUrlStr+='#'+objs[i].src;\
+    }\
+    }\
+    objs[i].onclick=function(){\
+    if(this.alt==''){\
+    document.location=\"myweb:imageClick:\"+this.src;\
+    }\
+    };\
+    };\
+    return imgUrlStr;\
+    };";
+    
+    //用js获取全部图片
+    [wkWebView evaluateJavaScript:jsGetImages completionHandler:^(id Result, NSError * error) {
+        NSLog(@"js___Result==%@",Result);
+        NSLog(@"js___Error -> %@", error);
+    }];
+    
+    
+    NSString *js2=@"getImages()";
+    
+    __block NSArray *array=[NSArray array];
+    [wkWebView evaluateJavaScript:js2 completionHandler:^(id Result, NSError * error) {
+        NSLog(@"js2__Result==%@",Result);
+        NSLog(@"js2__Error -> %@", error);
+        
+        NSString *resurlt=[NSString stringWithFormat:@"%@",Result];
+        
+        if([resurlt hasPrefix:@"#"])
+        {
+            resurlt=[resurlt substringFromIndex:1];
+        }
+        NSLog(@"result===%@",resurlt);
+        array=[resurlt componentsSeparatedByString:@"#"];
+        NSLog(@"array====%@",array);
+        [self setMethod:array];
+    }];
+    
+    return array;
+}
+-(BOOL)showBigImage:(NSURLRequest *)request
+{
+    //将url转换为string
+    NSString *requestString = [[request URL] absoluteString];
+    
+    //hasPrefix 判断创建的字符串内容是否以pic:字符开始
+    if ([requestString hasPrefix:@"myweb:imageClick:"])
+    {
+        NSString *imageUrl = [requestString substringFromIndex:@"myweb:imageClick:".length];
+        NSLog(@"image url------%@", imageUrl);
+        
+        NSArray *imgUrlArr=[self getImgUrlArray];
+        NSInteger index=0;
+        for (NSInteger i=0; i<[imgUrlArr count]; i++) {
+            if([imageUrl isEqualToString:imgUrlArr[i]])
+            {
+                index=i;
+                break;
+            }
+        }
+        
+        [WFImageUtil showImgWithImageURLArray:[NSMutableArray arrayWithArray:imgUrlArr] index:index myDelegate:nil];
+        
+        return NO;
+    }
+    return YES;
+}
+
 @end
